@@ -1,0 +1,364 @@
+
+# LIBRARIES
+
+```{r}
+library(readr)
+library(ggplot2)
+library(ggthemes)
+library(wesanderson)
+library(dplyr)
+library(tidyr)
+library(magrittr)
+library(stats)
+library(corrplot)
+library(factoextra)
+library(DataExplorer)
+library("psych")
+```
+
+
+```{r}
+custom = read_csv("/Users/chiarasaini/Desktop/SL new/Mall_Customers.csv")
+head(custom)
+```
+```{r}
+custom <- custom %>%
+  rename(customer_id = 1,
+         gender = 2,
+         age = 3,
+         annual_income = 4, 
+         spending_score = 5)
+```
+
+```{r}
+head(custom)
+```
+
+```{r}
+# unique customers
+n_distinct(custom$customer_id)
+```
+
+```{r}
+ plot_missing(custom)
+```
+
+
+```{r}
+# Summary of dataset
+summary_custom <- psych::describe(custom, fast = TRUE)
+summary_custom
+
+path_out = '/Users/chiarasaini/Desktop/SL new/Unsupervised_files'
+write.csv(summary_custom,paste(path_out,'summary_custom.csv'))
+```
+
+# Data analysis
+
+
+```{r}
+theme_set(theme_economist())
+```
+
+
+```{r}
+df1 <- custom %>% 
+  group_by(gender) %>% 
+  count() %>% 
+  ungroup() %>% 
+  mutate(per=`n`/sum(`n`)) %>% 
+  arrange(desc(gender))
+
+df1$label <- scales::percent(df1$per)
+
+
+gender_plt <- ggplot(data=df1)+
+  geom_bar(aes(x="", y=per, fill=gender), stat="identity", width = 1)+
+  coord_polar("y", start=0)+
+  ggtitle(paste0("Gender distribution")) +
+  geom_text(aes(x=1, y = cumsum(per) - per/2, label=label)) + 
+  scale_fill_manual(values=wes_palette(n=2, name="Darjeeling2"))
+
+gender_plt 
+
+ggsave("gender_plt.png", plot = gender_plt, path = "/Users/chiarasaini/Desktop/SL new/Unsupervised_files")
+```
+
+
+```{r}
+# Density of age by gender
+pl1 <- custom %>%
+  ggplot( aes(x=age, fill = gender)) +
+  geom_density(alpha = 0.5) +
+    xlab("Age")  +
+  ylab("Density") +
+  ggtitle("Density of age by gender")+ scale_fill_manual(values=wes_palette(n=2, name="Darjeeling2"))
+
+pl1 
+
+ggsave("pl1.png", plot = pl1, path = "/Users/chiarasaini/Desktop/SL new/Unsupervised_files")
+```
+
+
+
+```{r}
+# Counting the frequency of the values of the age
+age_analysis <- custom %>% 
+  group_by(age) %>% 
+  count() %>% 
+  ggplot()+
+  geom_col(aes(age, n), fill = "#046C9A") +
+  ggtitle("Age Analysis") +
+  xlab("Age")  +
+  ylab("AgeCount")
+
+age_analysis
+
+ggsave("age_analysis.png", plot = age_analysis, path = "/Users/chiarasaini/Desktop/SL new/Unsupervised_files")
+```
+
+
+```{r}
+age_analysis_boxpl<-ggplot(custom, aes(y = age)) + 
+  geom_boxplot(fill='#046C9A')+
+  ggtitle("Age analysis") +
+  ylab("Age") 
+
+age_analysis_boxpl
+
+ggsave("age_analysis_boxpl.png", plot = age_analysis_boxpl, path = "/Users/chiarasaini/Desktop/SL new/Unsupervised_files")
+```
+
+
+```{r}
+# Density income
+income_dens<-custom %>%
+  ggplot( aes(x=annual_income)) +
+  geom_density(alpha = 0.5, fill = "#046C9A") +
+  xlab("Income")  +
+  ylab("Density") +
+  ggtitle("Income density")
+
+income_dens
+ggsave("income_dens.png", plot = income_dens, path = "/Users/chiarasaini/Desktop/SL new/Unsupervised_files")
+```
+
+
+
+
+```{r}
+# Spending score
+spending_dens <- custom %>%
+  ggplot( aes(x=spending_score)) +
+  geom_density(alpha = 0.5, fill = "#046C9A") +
+    xlab("Spending score")  +
+  ylab("Density") +
+  ggtitle("Spending score density")
+
+spending_dens
+ggsave("spending_dens.png", plot = spending_dens, path = "/Users/chiarasaini/Desktop/SL new/Unsupervised_files")
+```
+```{r}
+#Annual income and spending score bo
+library(gridExtra)
+p1 <- ggplot(custom, aes(y = annual_income)) + geom_boxplot(fill='#ECCBAE') + ylim(c(1,150))
+p2 <- ggplot(custom, aes(y = spending_score)) + geom_boxplot(fill='#046C9A') + ylim(c(1,150))
+p_1_2 <- grid.arrange(p1, p2, ncol = 2)
+p_1_2
+p_1_2
+ggsave("p_1_2.png", plot = p_1_2, path = "/Users/chiarasaini/Desktop/SL new/Unsupervised_files")
+```
+
+
+```{r}
+custom$gender <- as.factor(custom$gender)
+custom$gender <- as.numeric(custom$gender)
+
+lapply(custom, class)
+```
+
+
+```{r}
+custom$gender[custom$gender == 2 ] <- 0 # Male = 0 Female = 1
+head(custom)
+```
+
+
+```{r}
+
+cor_custom<- cor(custom[,-1])
+cor_custom
+```
+```{r}
+corrplot(cor_custom)
+```
+
+
+
+```{r}
+custom_norm <- lapply(custom[c(3,4,5)], function(x) c(scale(x)))
+custom_norm <- as.data.frame(custom_norm)
+custom_norm[ , 'gender'] <- custom$gender
+custom_norm <- custom_norm %>%
+  select(gender, everything())
+
+head(as_tibble(custom_norm))
+```
+
+```{r}
+distance <- get_dist(custom_norm)
+```
+
+
+```{r}
+distance <- fviz_dist(distance, gradient = list(low = "#ECCBAE", mid = "white", high = "#046C9A"))
+distance
+
+ggsave("distance.png", plot = distance, path = "/Users/chiarasaini/Desktop/SL new/Unsupervised_files")
+```
+
+```{r}
+# Elbow Method
+set.seed(86)
+elb_pl <- fviz_nbclust(custom_norm, kmeans, method = "wss", linecolor = "#046C9A")
+elb_pl
+
+ggsave("elb_pl.png", plot = elb_pl, path = "/Users/chiarasaini/Desktop/SL new/Unsupervised_files")
+```
+
+```{r}
+# K = 4
+kmodel_4 = kmeans(custom_norm, centers = 4)
+kmodel_4
+table(kmodel_4$cluster)
+```
+
+
+```{r}
+# K = 5
+kmodel_5 = kmeans(custom_norm, centers = 5)
+kmodel_5
+table(kmodel_5$cluster)
+```
+```{r}
+# Average Silouette Method
+avg_sil <- fviz_nbclust(custom_norm, kmeans, method = "silhouette", k.max = 10, linecolor = "#046C9A")
+avg_sil
+
+ggsave("avg_sil.png", plot = avg_sil, path = "/Users/chiarasaini/Desktop/SL new/Unsupervised_files")
+```
+
+```{r}
+# K = 6
+kmodel_6 = kmeans(custom_norm, centers = 6)
+kmodel_6
+table(kmodel_6$cluster)
+```
+```{r}
+library(cluster)
+
+set.seed(86)
+
+gap_stat <- clusGap(custom_norm, FUN = kmeans, K.max = 10)
+
+print(gap_stat, method = "firstmax")
+
+opt_clus<-fviz_gap_stat(gap_stat, linecolor = "#046C9A")
+opt_clus
+
+ggsave("opt_clus.png", plot = opt_clus, path = "/Users/chiarasaini/Desktop/SL new/Unsupervised_files")
+```
+```{r}
+# K = 2
+kmodel_2 = kmeans(custom_norm, centers = 2)
+kmodel_2
+table(kmodel_2$cluster)
+```
+
+```{r}
+
+k2 <- kmeans(custom_norm, centers = 2, nstart = 25)
+k4 <- kmeans(custom_norm, centers = 4, nstart = 25)
+k5 <- kmeans(custom_norm, centers = 5, nstart = 25)
+k6 <- kmeans(custom_norm, centers = 6, nstart = 25)
+
+p1 <- fviz_cluster(k2, geom = "point", data = custom_norm)+
+  ggtitle("k = 2")
+p3 <- fviz_cluster(k4, geom = "point", data = custom_norm)+
+  ggtitle("k = 4")
+p4 <- fviz_cluster(k5, geom = "point", data = custom_norm)+
+  ggtitle("k = 5")
+p5 <- fviz_cluster(k6, geom = "point", data = custom_norm)+
+  ggtitle("k = 6")
+
+library(gridExtra)
+kmn_division <- grid.arrange(p1,p3,p4,p5, nrow = 2)
+kmn_division
+
+ggsave("kmn_division.png", plot = kmn_division, path = "/Users/chiarasaini/Desktop/SL new/Unsupervised_files")
+```
+
+
+```{r}
+library(radiant.data)
+library(ggiraphExtra)
+
+final <- kmeans(custom_norm, 4, nstart = 30)
+custom_df <- as.data.frame(custom_norm) %>% rownames_to_column()
+cluster_pos <- as.data.frame(final$cluster) %>% rownames_to_column()
+colnames(cluster_pos) <- c("rowname", "cluster")
+custom_final <- inner_join(cluster_pos, custom_df)
+
+radar_plt<-ggRadar(custom_final[-1], aes(group = cluster), rescale = FALSE, legend.position = "none", size = 2, interactive = FALSE, use.label = TRUE) + 
+  facet_wrap(~cluster) + 
+  scale_y_discrete(breaks = NULL) +
+  theme(axis.text.x = element_text(size = 8)) + 
+  scale_fill_manual(values = rep("#1c6193", nrow(custom_final))) +
+  scale_color_manual(values = rep("#1c6193", nrow(custom_final))) +
+  ggtitle("Customer groups")
+radar_plt
+
+ggsave("radar_plt.png", plot = radar_plt, path = "/Users/chiarasaini/Desktop/SL new/Unsupervised_files")
+```
+
+
+```{r}
+final_5 <- kmeans(custom_norm, 5, nstart = 30)
+custom_df_5 <- as.data.frame(custom_norm) %>% rownames_to_column()
+cluster_pos_5 <- as.data.frame(final_5$cluster) %>% rownames_to_column()
+colnames(cluster_pos_5) <- c("rowname", "cluster")
+custom_final_5 <- inner_join(cluster_pos_5, custom_df_5)
+
+radar_plt_5<-ggRadar(custom_final_5[-1], aes(group = cluster), rescale = FALSE, legend.position = "none", size = 2, interactive = FALSE, use.label = TRUE) + 
+  facet_wrap(~cluster) + 
+  scale_y_discrete(breaks = NULL) +
+  theme(axis.text.x = element_text(size = 8)) + 
+  scale_fill_manual(values = rep("#1c6193", nrow(custom_final_5))) +
+  scale_color_manual(values = rep("#1c6193", nrow(custom_final_5))) +
+  ggtitle("Customer groups")
+radar_plt_5
+
+ggsave("radar_plt_5.png", plot = radar_plt_5, path = "/Users/chiarasaini/Desktop/SL new/Unsupervised_files")
+```
+
+
+```{r}
+final_6 <- kmeans(custom_norm, 6, nstart = 30)
+custom_df_6 <- as.data.frame(custom_norm) %>% rownames_to_column()
+cluster_pos_6 <- as.data.frame(final_6$cluster) %>% rownames_to_column()
+colnames(cluster_pos_6) <- c("rowname", "cluster")
+custom_final_6 <- inner_join(cluster_pos_6, custom_df_6)
+
+radar_plt_6<-ggRadar(custom_final_6[-1], aes(group = cluster), rescale = FALSE, legend.position = "none", size = 2, interactive = FALSE, use.label = TRUE) + 
+  facet_wrap(~cluster) + 
+  scale_y_discrete(breaks = NULL) +
+  theme(axis.text.x = element_text(size = 8)) + 
+  scale_fill_manual(values = rep("#1c6193", nrow(custom_final_6))) +
+  scale_color_manual(values = rep("#1c6193", nrow(custom_final_6))) +
+  ggtitle("Customer groups")
+radar_plt_6
+
+ggsave("radar_plt_6.png", plot = radar_plt_6, path = "/Users/chiarasaini/Desktop/SL new/Unsupervised_files")
+```
+
+
