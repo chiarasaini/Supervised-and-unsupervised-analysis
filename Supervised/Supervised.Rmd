@@ -1,0 +1,872 @@
+---
+output:
+  pdf_document: default
+  html_document: default
+---
+# LIBRARIES
+
+```{r}
+library(tidyverse)
+library(dplyr)
+library(DataExplorer)
+library(ggplot2)
+library(ggthemes)
+library(wesanderson)
+library(caTools)# spliting dataset
+library(caret)# partition, confusion matrix, calculate F1, precision...
+library(e1071)# for Naieve Bayes train model
+library(ROSE)# for ROC curve
+library(rattle)# fancy plot
+library(ggpubr)
+library(rpart)
+library(rpart.plot)
+library(randomForest)
+library(irr)
+library("psych")
+library(class)
+```
+
+
+# DATA EXPLORATION
+
+```{r}
+library(readr)
+
+census_in <- read_csv("/Users/chiarasaini/Desktop/uni/SL lectures/SL new/Statistical learning project - Chiara Saini /Supervised/adult.csv") #Set path
+head(census_in)
+```
+
+
+## Check for NA values
+```{r}
+colSums(is.na(census_in))
+```
+
+```{r}
+nrow(census_in)
+```
+
+
+```{r}
+str(census_in)
+summary(census_in)
+```
+
+
+## Group and count each group
+
+```{r}
+# Workclass
+census_in %>% group_by(workclass) %>% count()
+# Education
+census_in %>% group_by(education) %>% count()
+# Marital status
+census_in %>% group_by(marital.status) %>% count()
+# Occupation
+census_in %>% group_by(occupation) %>% count()
+# Relationship
+census_in %>% group_by(relationship) %>% count()
+# Race
+census_in %>% group_by(race) %>% count()
+# Sex
+census_in %>% group_by(sex) %>% count()
+# Native country
+census_in %>% group_by(native.country) %>% count()
+# Income
+census_in %>% group_by(income) %>% count()
+
+```
+
+# DATA MANIPULATION
+
+```{r}
+# Change  ? to NA value
+head(census_in)
+census_in[census_in == "?"]<- NA
+
+colSums(is.na(census_in))
+```
+
+```{r}
+# Omit missing data records
+census<- na.omit(census_in)
+head(census)
+colSums(is.na(census))
+```
+
+```{r}
+#mark income<=50K as 0 and income>50 as 1
+
+#census$income<-ifelse(census$income=='<=50K',0,1)
+```
+
+```{r}
+# Grouping for workclass attribute
+unempl <- function(job_role){
+    job_role <- as.character(job_role)
+    if (job_role=="Never-worked" | job_role=="Without-pay"){
+        return("Other")
+    }else{
+        return(job_role)
+    }
+}
+census$workclass <- sapply(census$workclass,unempl)
+table(census$workclass)
+```
+
+```{r}
+# Grouping for workclass attribute
+grp_emp <- function(job_role){
+    if (job_role=="Local-gov" | job_role=="State-gov" | job_role=="Federal-gov"){
+        return("Government")
+    }else if (job_role=="Self-emp-inc" | job_role=="Self-emp-not-inc"){
+        return("Self_employ")
+    }else{
+        return(job_role)
+    }
+}
+census$workclass <- sapply(census$workclass,grp_emp)
+table(census$workclass)
+```
+
+```{r}
+# Grouping for education attribute
+educ <- function(educ_level){
+    if (educ_level=="Preschool" | educ_level=="1st-4th" | educ_level=="5th-6th"| educ_level=="7th-8th"| educ_level=="9th"| educ_level=="10th"| educ_level=="11th"| educ_level=="12th"){
+        return("not_HS_grad")
+    }else{
+        return(educ_level) }
+    }
+census$education <- sapply(census$education,educ)
+table(census$education)
+```
+
+```{r}
+# Grouping for marital.status attribute
+
+group_marital <- function(marital_stat){
+    marital_stat <- as.character(marital_stat)
+    
+    # Not-Married
+    if (marital_stat=="Separated" | marital_stat=="Divorced" | marital_stat=="Widowed"){
+        return("Not-Married")
+    
+    # Never-Married   
+    }else if(marital_stat=="Never-married"){
+        return(marital_stat)
+    
+     #Married
+    }else{
+        return("Married")
+    }
+}
+
+census$marital.status <- sapply(census$marital.status,group_marital)
+table(census$marital.status)
+```
+
+```{r}
+# Grouping for native.country attribute
+Asia <- c("China","Hong","India","Iran","Cambodia","Japan", "Laos","Philippines" ,"Vietnam" ,"Taiwan", "Thailand")
+
+N.A <- c("Canada","United-States","Puerto-Rico")
+
+Europe <- c("England","France","Germany" ,"Greece","Holand-Netherlands","Hungary","Ireland","Italy","Poland","Portugal","Scotland"
+            ,"Yugoslavia")
+
+S.A <- c("Columbia","Cuba","Dominican-Republic","Ecuador","El-Salvador","Guatemala","Haiti","Honduras","Mexico","Nicaragua"
+                   ,"Outlying-US","Peru","Jamaica","Trinadad&Tobago")
+Remaining_count <- c("South")
+```
+
+```{r}
+# Grouping for native.country attribute
+grp_cntry <- function(cntry){
+    if (cntry %in% Asia){
+        return("Asia")
+    }else if (cntry %in% N.A){
+        return("N.A")
+    }else if (cntry %in% Europe){
+        return("Europe")
+    }else if (cntry %in% S.A){
+        return("S.A")
+    }else{
+        return("Remaining_count")      
+    }
+}
+census$native.country <- sapply(census$native.country,grp_cntry)
+table(census$native.country)
+```
+
+
+```{r}
+# Grouping for occupation attribute
+occup <- function(occup_type){
+    if (occup_type=="Craft-repair" | occup_type=="Farming-fishing" | occup_type=="Handlers-cleaners"| occup_type=="Machine-op-inspct"| occup_type=="Transport-moving"){
+        return("Worker")
+    }
+  else if (occup_type=="Other-service" | occup_type=="Priv-house-serv" | occup_type=="Protective-serv" | occup_type=="Tech-support"){
+        return("Service")
+    }
+  else if (occup_type=="Exec-managerial"| occup_type=="Adm-clerical"){
+        return("Office")
+    }
+  else if (occup_type=="Prof-specialty"){
+        return("Professional")
+    }else{
+        return(occup_type) }
+    }
+census$occupation <- sapply(census$occupation,occup)
+table(census$occupation)
+```
+
+```{r}
+# Converting into factor datatype
+census$workclass <- as.factor(census$workclass)
+census$native.country <- as.factor(census$native.country)
+census$marital.status <- as.factor(census$marital.status)
+census$occupation <- as.factor(census$occupation)
+census$education <- as.factor(census$education)
+
+str(census)
+```
+
+
+
+
+```{r}
+#Correlation of numeric independent variables with target varible income
+correl <- cor(census%>% select_if(is.numeric))
+round(correl, 2)
+```
+education.num is highly correlated with target(income) and fnwgt is lowest in correlation with target. Therefore during model building it will be dropped.
+
+```{r}
+#conventing income to factor
+census$income<-as.factor(as.character(census$income))
+```
+
+```{r}
+# Summary of dataset
+summary_census <- psych::describe(census, fast = TRUE)
+summary_census
+
+#path_out = '' #Set path
+#write.csv(summary_census,paste(path_out,'summary.csv'))
+```
+
+
+# DATA INSIGHT
+
+
+```{r}
+# Income 
+table(census$income)
+```
+
+```{r}
+theme_set(theme_economist())
+```
+
+```{r}
+df1 <- census %>% 
+  group_by(income) %>% 
+  count() %>% 
+  ungroup() %>% 
+  mutate(per=`n`/sum(`n`)) %>% 
+  arrange(desc(income))
+
+df1$label <- scales::percent(df1$per)
+
+
+income_plt <- ggplot(data=df1)+
+  geom_bar(aes(x="", y=per, fill=income), stat="identity", width = 1)+
+  coord_polar("y", start=0)+
+  ggtitle(paste0("Income distribution")) +
+  geom_text(aes(x=1, y = cumsum(per) - per/2, label=label)) + 
+  scale_fill_manual(values=wes_palette(n=2, name="FantasticFox1"))
+
+income_plt 
+
+#ggsave("income_plt.png", plot = income_plt, path = "") #Set path
+
+```
+
+
+```{r}
+
+# Age distribution
+hist(census$age, 
+     main="Age distribution", 
+     xlab="Age", 
+     ylab="Count",
+     border="white", 
+     col="#7394D4",
+     xlim=c(0,100),
+     las=1, 
+     breaks=50)
+
+# Comparison age and income
+plot1<- ggplot(census, aes(x=age)) + 
+  geom_bar(aes(fill=income)) +
+  ggtitle(paste0("Comparison between age and income")) + 
+  scale_fill_manual(values=wes_palette(n=2, name="FantasticFox1"))
+
+
+plot1 
+
+#ggsave("plot1.png", plot = plot1, path = "") #Set path
+```
+
+```{r}
+# Workclass distribution
+t1<- table(census$workclass)
+barplot(t1,
+        main="Workclass distribution",
+        xlab = "Workclass", 
+        ylab = "Count",
+        col = "#7394D4",
+        border="white")
+
+# Comparison workclass and income
+plot2<- ggplot(census, aes(x=workclass)) + 
+  geom_bar(aes(fill=income)) +
+  ggtitle(paste0("Comparison between workclass and income")) + 
+  scale_fill_manual(values=wes_palette(n=2, name="FantasticFox1"))
+
+plot2 
+
+#ggsave("plot2.png", plot = plot2, path = "") #Set path
+```
+
+```{r}
+# Comparison between fnlwgt and income
+plot12<- ggplot(census, aes(x=fnlwgt)) + 
+  geom_density(aes(fill=income), alpha=0.5) +
+  ggtitle(paste0("Comparison between final weight and income")) + 
+  scale_fill_manual(values=wes_palette(n=2, name="FantasticFox1"))
+  
+  
+plot12 
+
+#ggsave("plot12.png", plot = plot12, path = "") #Set path
+```
+
+
+```{r}
+#Education distribution
+t2<- table(census$education)
+barplot(t2,
+        main="Education distribution",
+        horiz = T, 
+        xlab = "Count",
+        ylab = "education",
+        col = "#7394D4",
+        border="white",
+        xlim=c(0,12000),
+        cex.names = 0.50,
+        las=1)
+
+# Comparison education and income
+plot3<- ggplot(census, aes(x=education)) + 
+  geom_bar(aes(fill=income)) +
+  ggtitle(paste0("Comparison between education and income")) + 
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1)) + 
+  scale_fill_manual(values=wes_palette(n=2, name="FantasticFox1"))
+
+plot3
+
+#ggsave("plot3.png", plot = plot3, path = "") #Set path
+```
+
+
+```{r}
+# Education number count
+t3<- table(census$education.num)
+barplot(t3,
+        main="Count of education year",
+        horiz = T, 
+        xlab = "Count", 
+        ylab = "Education number (Year)",
+        col = "#7394D4",
+        border="white",
+        las=1)
+
+
+# Education number and Income
+plot4<- ggplot(census, aes(x=education.num)) + 
+  geom_bar(aes(fill=income)) +
+  ggtitle(paste0("Comparison between years of education and income")) + 
+  scale_fill_manual(values=wes_palette(n=2, name="FantasticFox1"))
+
+plot4
+
+#ggsave("plot4.png", plot = plot4, path = "") #Set path
+```
+
+
+```{r}
+# Distribution of marital status
+t4<- table(census$marital.status)
+barplot(t4,
+        main="Plot for marital status", 
+        xlab = "Marital status", 
+        ylab = "Count",
+        col = "#7394D4",
+        border="white")
+
+# Comparison between marital status and Income 
+plot5<- ggplot(census, aes(x=marital.status)) + 
+  geom_bar(aes(fill=income)) +
+  ggtitle(paste0("Comparison between marital status and income")) + 
+  scale_fill_manual(values=wes_palette(n=2, name="FantasticFox1"))
+
+plot5 
+
+#ggsave("plot5.png", plot = plot5, path = "") #Set path
+```
+
+
+```{r}
+# Distribution of occupation
+t5<- table(census$occupation)
+barplot(t5,
+        main="Occupation distribution", 
+        horiz = T, 
+        xlab = "Occupation",
+        col = "#7394D4",
+        border="white",
+        xlim = c(0,12000),
+        cex.names = 0.5, 
+        las=1)
+
+
+# Comparison between occupation and income 
+plot6<- ggplot(census, aes(x=occupation)) + 
+  geom_bar(aes(fill=income)) +
+  ggtitle(paste0("Comparison between occupation and income")) + 
+  scale_fill_manual(values=wes_palette(n=2, name="FantasticFox1"))
+
+plot6 
+
+#ggsave("plot6.png", plot = plot6, path = "") #Set path
+```
+
+```{r}
+# Comparison between relationship and income 
+plot11<- ggplot(census, aes(x=relationship)) + 
+  geom_bar(aes(fill=income)) +
+  ggtitle(paste0("Comparison between relationship and income")) + 
+  scale_fill_manual(values=wes_palette(n=2, name="FantasticFox1"))+ 
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1))
+
+plot11
+
+
+#ggsave("plot11.png", plot = plot11, path = "") #Set path
+```
+
+
+```{r}
+# Race distribution
+t6<- table(census$race)
+barplot(t6,
+        main = "Race distribution", 
+        xlab = "Race",
+        ylab ="Count",
+        col = "#7394D4",
+        border="white",
+        ylim=c(0,30000),
+        cex.names = 0.6)
+
+# Comparison between race and income
+plot7<- ggplot(census, aes(x=race)) + 
+  geom_bar(aes(fill=income)) +
+  ggtitle(paste0("Comparison between Race and Income")) + 
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1))+ 
+  scale_fill_manual(values=wes_palette(n=2, name="FantasticFox1"))
+  
+plot7
+
+#ggsave("plot7.png", plot = plot7, path = "")#Set path
+```
+
+
+```{r}
+# Compare sex and income
+t7<- table(census$sex)
+barplot(t7,
+        main="Sex count", 
+        xlab = "Sex",
+        ylab = "Count",
+        col = "#7394D4",
+        border="white")
+
+
+# Comparison between sex and income
+plot8<- ggplot(census, aes(x=sex)) + 
+  geom_bar(aes(fill=income)) +
+  ggtitle(paste0("Comparison between sex and income")) +
+  scale_fill_manual(values=wes_palette(n=2, name="FantasticFox1"))
+  
+  
+plot8
+
+#ggsave("plot8.png", plot = plot8, path = "") #Set path
+```
+
+
+```{r}
+# Hours-per-week distribution
+
+plot9<- ggplot(census, aes(x=hours.per.week))+ 
+  geom_density(aes(fill=income), alpha = 0.5)  +
+  ggtitle(paste0("Comparison between Hours-per-week and Income")) + 
+  scale_fill_manual(values=wes_palette(n=2, name="FantasticFox1"))
+
+
+plot9
+
+#ggsave("plot9.png", plot = plot9, path = "") #Set path
+```
+
+```{r}
+# Comparison between capital gain and income
+plot13<- ggplot(census, aes(x=capital.gain)) + 
+  geom_histogram(aes(fill=income)) +
+  ggtitle(paste0("Comparison between capital gain and income")) 
+  geom_histogram(aes(fill=income), alpha=0.6)
+  
+  
+plot13 <- plot13  + scale_fill_manual(values=wes_palette(n=2, name="FantasticFox1"))
+
+plot13
+
+#ggsave("plot13.png", plot = plot13, path = "") #Set path
+```
+
+
+```{r}
+# Comparison between capital loss and income
+plot14<- ggplot(census, aes(x=capital.loss)) + 
+  geom_histogram(aes(fill=income)) +
+  ggtitle(paste0("Comparison between capital loss and income")) 
+  geom_histogram(aes(fill=income), alpha=0.6)
+  
+plot14 <-plot14 + scale_fill_manual(values=wes_palette(n=2, name="FantasticFox1"))
+plot14
+
+#ggsave("plot14.png", plot = plot14, path = "") #Set path
+```
+
+
+
+```{r}
+
+# Comparison between native country and income
+plot10<- ggplot(census, aes(x=native.country)) + 
+  geom_bar(aes(fill=income)) +
+  ggtitle(paste0("Comparison between native country and income")) + 
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1)) + 
+  scale_fill_manual(values=wes_palette(n=2, name="FantasticFox1"))
+  
+  
+plot10
+
+#ggsave("plot10.png", plot = plot10, path = "") #Set path
+```
+
+
+# TRAIN, TEST SPLIT
+ fnlwgt is not much corrrelated with income, therefore it can be dropped
+ 
+ 
+ 
+```{r}
+#cato <- c('workclass','education','marital.status','occupation','relationship','race','sex','native.country')
+#for(each in cato){
+#  census[,each]<-as.integer(census[,each])
+#}
+```
+ 
+
+```{r}
+#census=census[,-3]
+```
+
+
+```{r}
+# Splitting the data 
+set.seed(86)
+index<-sample(nrow(census),0.70*nrow(census),replace = F)
+train<-census[index,]
+test<-census[-index,]
+```
+
+```{r}
+summary(train)
+summary(test)
+```
+
+```{r}
+table(train$income)
+table(test$income)
+```
+
+```{r}
+mydata <- income ~.
+```
+
+# RESAMPlING
+
+
+```{r}
+data_balanced_over <- ovun.sample(income~., data=train, method = "both")$data # Resampling to balance data, using method "both"
+table(data_balanced_over$income)
+train <- data_balanced_over
+```
+# KNN
+
+```{r}
+# create dummy variables for train
+dmy.training = dummyVars(" ~ .", data = train)
+training.dmy = data.frame(predict(dmy.training, newdata = train))
+
+training.dmy = training.dmy[-48]  # Remove column 48 which is income <=50k
+names(training.dmy)[names(training.dmy) == "income..50K"] = "income.more.50k" # Rename the income>50k column
+
+
+# create dummy variables for test
+dmy.test = dummyVars(" ~ .", data = test)
+test.dmy = data.frame(predict(dmy.test, newdata = test))
+
+test.dmy = test.dmy[-48]  # Remove column 48 which is income<=50
+names(test.dmy)[names(test.dmy) == "income..50K"] = "income.more.50k" # Rename the income>50k column
+```
+
+```{r}
+head(training.dmy)
+head(test.dmy)
+```
+
+```{r}
+#knn models
+knn.training = training.dmy[-47] # Remove target variable
+knn.test = test.dmy[-47]
+
+train_labels = census$income[index] 
+test_labels = census$income[-index]
+
+# Building the models with different k values
+estknn.20 = knn(knn.training, knn.test , train_labels, k=20)
+estknn.10 = knn(knn.training, knn.test , train_labels, k=10)
+estknn.5 = knn(knn.training, knn.test , train_labels, k=5)
+
+# Confusion Matrix 
+cm.knn20 = confusionMatrix(reference = test$income, data = estknn.20, positive = '>50K')
+acu.knn20 = confusionMatrix(reference = test$income, data = estknn.20, positive = '>50K')$overall[1]
+cm.knn10 = confusionMatrix(reference = test$income, data = estknn.10, positive = '>50K')
+acu.knn10 = confusionMatrix(reference = test$income, data = estknn.10, positive = '>50K')$overall[1]
+cm.knn5 = confusionMatrix(reference = test$income, data = estknn.5, positive = '>50K')
+acu.knn5 = confusionMatrix(reference = test$income, data = estknn.5, positive = '>50K')$overall[1]
+```
+
+```{r}
+cm.knn20
+```
+
+```{r}
+cm.knn10
+```
+
+```{r}
+cm.knn5
+```
+
+```{r}
+Accuracy<-data.frame(Model=c('K = 20','K = 10','K = 5'),Accuracy=c(acu.knn20,acu.knn10,acu.knn5))
+
+
+acc_nn <- ggplot(Accuracy,aes(x=Model,y=Accuracy)) +
+  geom_bar(stat = 'identity', aes(fill=Model)) +
+  ggtitle('Accuracies of Knn')
+acc_nn <- acc_nn + scale_fill_manual(values=wes_palette(n=4, name="FantasticFox1"))
+acc_nn
+#ggsave("acc_nn.png", plot = acc_nn, path = "") #Set path
+```
+
+
+
+# LOGISTIC REG
+
+```{r}
+#mark income<=50K as 0 and income>50 as 1
+
+#census$income<-ifelse(census$income=='<=50K',0,1)
+```
+
+
+```{r}
+logic_model <- glm(income ~ ., family = binomial(logit), data = train)
+summary(logic_model)
+```
+
+```{r}
+#calculate p-value of overall Chi-Square statistic
+1-pchisq(29268-16768, 21112-21074)
+```
+
+
+```{r}
+# Confusion Matrix and predictions
+
+predicted.income = predict(logic_model, newdata=test, type="response")
+conf_matrix <- table(test$income, predicted.income > 0.5)
+conf_matrix
+
+```
+TP = 1828  ->  You predicted positive and it’s true.
+TN = 5401  ->  You predicted negative and it’s true.
+
+FP = 389  ->  You predicted positive and it’s false.
+FN = 1431   ->  You predicted negative and it’s false.
+
+
+
+```{r}
+print("Accuracy")
+lgAcu <- (1828+5401)/(5401+1828+1431+389)
+lgAcu
+# Specificity 
+print("Specificity")
+5401/(5401+389)
+
+# Sensitivity
+print("Sensitivity")
+1828/(1828+1431)
+
+# Precision
+print("Precision")
+1828/(1828+389)
+
+# Error rate
+print("Error rate")
+(389+1431)/(1828+5401+1431+389)
+
+```
+
+```{r}
+summary(logic_model$residuals)
+```
+
+```{r}
+plot(predict(logic_model),residuals(logic_model))
+abline(h=0,lty=2,col="grey")
+```
+
+
+# TREE
+
+```{r}
+treeFit<- rpart(income~.,data=train,method = 'class')
+print(treeFit)
+
+```
+```{r}
+rpart.plot(treeFit, box.col=c("#DD8D29", "#46ACC8"))
+```
+```{r}
+Prediction1<- predict(treeFit,newdata=test[-15],type = 'class')
+confusionMatrix(Prediction1,test$income)
+TreeAcu<-confusionMatrix(Prediction1,test$income)$overall[1]
+TreeAcu
+```
+
+```{r}
+recall(factor(Prediction1), factor(test$income))
+precision(factor(Prediction1), factor(test$income))
+F_meas(factor(Prediction1), factor(test$income))
+```
+
+```{r}
+# USING GINI INDEX
+tc<- trainControl(method="cv", number=5)
+model2_res<- train(income ~ .,data = train,method="rpart2",
+                 parms = list(split = 'gini'),
+                 trControl=tc)
+
+rpart.plot(model2_res$finalModel, box.palette = c("#DD8D29", "#46ACC8"))
+
+prediction2_res<- predict(model2_res, test, type="raw")
+
+
+confusionMatrix(factor(prediction2_res), factor(test$income))
+GiniAcu <- confusionMatrix(factor(prediction2_res), factor(test$income))$overall[1]
+
+recall(factor(prediction2_res), factor(test$income))
+precision(factor(prediction2_res), factor(test$income))
+F_meas(factor(prediction2_res), factor(test$income))
+```
+
+```{r}
+# USING NAIVE BAYES
+model3_res <- naiveBayes(as.factor(income) ~.,
+                       data= train,
+                       control= tc)
+
+prediction3_res<- predict(model3_res, test)
+
+
+confusionMatrix(factor(prediction3_res),factor(test$income))
+BayesAcu<-confusionMatrix(factor(prediction3_res),factor(test$income))$overall[1]
+BayesAcu
+recall(factor(prediction3_res), factor(test$income))
+precision(factor(prediction3_res), factor(test$income))
+F_meas(factor(prediction3_res), factor(test$income))
+```
+
+```{r}
+Accuracy <- data.frame(Model=c('Knn', 'Logistic Regression','Decision Tree','Gini index','Naive Bayes'),Accuracy=c(acu.knn20,lgAcu, TreeAcu,GiniAcu,BayesAcu))
+
+acc_models <- ggplot(Accuracy,aes(x=Model,y=Accuracy)) +
+  geom_bar(stat = 'identity', aes(fill=Model)) +
+  ggtitle('Accuracies of Models')+
+  theme(legend.position="none")
+
+acc_models <- acc_models+ scale_fill_manual(values=wes_palette(n=5, name="FantasticFox1"))
+acc_models
+#ggsave("acc_models.png", plot = acc_models, path = "") #Set path
+```
+
+```{r}
+# EVALUATE MODELS USING ROC CURVE
+
+tree_1 <- Prediction1
+Gini_Index_2 <- prediction2_res
+Naive_Bayes_2 <-prediction3_res
+```
+
+```{r}
+colAUC(X=cbind(tree_1, Gini_Index_2, Naive_Bayes_2),
+       y=test$income,plotROC=TRUE)
+```
+
+```{r}
+colAUC(X=cbind( Naive_Bayes_2),
+       y=test$income,plotROC=TRUE)
+```
+
+```{r}
+Random_Forest <- randomForest(income~.,data = train)
+Random_Forest
+pred_Random_Forest<- predict(Random_Forest,test)
+
+#confusion matrix
+confusionMatrix(pred_Random_Forest, test$income, positive = ">50K")
+```
+Now accuracy is little bit low (83%) as compared to previous model . But our sensitivity is now high 0.829 ans specificity is 0.83. So if our aim is to predict high income people ,our second model should be choosen as sensitivity is high than previous model...This model is predicting high income more correctly.
+
+```{r}
+varImpPlot(Random_Forest)
+```
+
